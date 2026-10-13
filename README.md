@@ -1,42 +1,31 @@
-# Email downloads
+# Email PDFs to Drive
 
-Save unread Inbox emails and their original attachments to Google Drive.
-There is no forwarding or file conversion.
+1. Set `GOOGLE_DRIVE_FOLDER_ID` in `MainFunction.js` to your folder ID.
+2. Check `START` and `QUERY`; the current start date is 4 September 2026, UTC+10.
+3. Keep Advanced Gmail enabled and use the included Apps Script manifest.
+4. Run `installForwarder` once. It checks unread Inbox mail every 30 minutes.
 
-1. Paste `MainFunction.js` and `TriggerInstaller.js` into your standalone Apps
-   Script project. Use the included `appsscript.json` and enable Advanced Gmail
-   API v1. A standard Cloud project also needs the Gmail API enabled there.
-2. Check `START` and `QUERY`. The current cutoff is 4 September 2026, midnight
-   UTC+10. Change `DRIVE_FOLDER_NAME` if you want a different folder name.
-3. Run `forwardFromSeptember4` to download a batch. Its existing name is retained
-   so old triggers continue working. Run `installForwarder` once if you need
-   the 30-minute schedule; it preserves unrelated triggers.
+The Gmail query leaves subjects containing remittance, payment, or EFT alone.
+It does not change those emails. This simple filter also skips payment requests
+with those subject words; edit the query if you want a narrower selection.
 
-The script creates **Email downloads** in My Drive. Each email gets a subfolder
-named with its Gmail message ID. `email.eml` contains the complete original email,
-including headers, body, and embedded attachments. Open it with an email client.
-Attachments are also saved separately in their original formats, including
-inline images. Numbered filenames distinguish attachments with identical names.
+Other emails save directly into the chosen Drive folder:
 
-After all files save, that individual Gmail message gets `forwarded` and becomes
-read. It stays in Inbox. The label name is retained from the original workflow;
-here it means saved to Drive. Existing `forwarded` messages remain excluded.
-Remittance/EFT notices get `CheckPlease`, stay unread, and are not downloaded.
-Detection uses subject, body notice phrases, and filenames; it does not inspect
-attachment contents and unusual notices may need a filter adjustment.
+- `<message ID>_EMAIL_BODY.pdf`: readable headers and the original HTML body.
+- `<message ID>_<number>_<filename>`: each attachment in its original format,
+  including inline images. Attachments are not converted.
 
-Each run handles up to 50 messages. The next run picks up remaining unread mail.
-A lock prevents overlapping runs. If a save or label change fails, the next run
-reuses the same message folder and existing filenames, then saves missing files.
-Keep downloaded files intact until the source has been marked complete.
+The message ID prevents collisions. Existing filenames are reused after partial
+failures. Only after all files save does the source get `forwarded` and become
+read. It stays in Inbox. Up to 50 emails are handled each run.
 
-## Local validation
+For an older `.eml` download, remove `forwarded` and mark its source email unread
+before rerunning. Earlier downloads remain in their old location.
 
-```sh
-node --check MainFunction.js
-node --check TriggerInstaller.js
-node --test test/forwarder.test.cjs
-```
+PDF rendering is done by Apps Script's HTML-to-PDF conversion. It is not a browser
+print command; Gmail's interface, remotely hosted images, and inline image layout
+may render differently. Inline image files are saved separately.
 
-Tests use mock Gmail and Drive services. Live Google authorization and downloads
-have not been executed during this code review.
+Local validation: `node --check MainFunction.js` and
+`node --test test/forwarder.test.cjs`. Tests use mocks; live Gmail and PDF rendering
+must be checked in Apps Script.
