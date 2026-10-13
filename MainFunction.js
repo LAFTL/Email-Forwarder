@@ -1,10 +1,13 @@
 const HANDLER = 'forwardFromSeptember4'; // Keep the existing trigger working.
 const START = Math.floor(Date.parse('2026-09-04T00:00:00+10:00') / 1000) - 1;
+// Math.floor - whole seconds. The minus one includes the start time.
+// Unread Inbox only. Skip mail already saved or flagged for review.
 const QUERY = `in:inbox is:unread after:${START} -in:sent -in:drafts -in:spam -in:trash -label:forwarded -label:CheckPlease`;
 const DRIVE_FOLDER_NAME = 'Email downloads';
 
 function forwardFromSeptember4() {
   if (!Number.isFinite(START)) throw new Error('Invalid start date.');
+  // One run at a time, so overlapping triggers cannot save the same email together.
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
   try {
@@ -23,12 +26,15 @@ function forwardFromSeptember4() {
             [forwarded, checkPlease, 'SENT', 'DRAFT', 'SPAM', 'TRASH'].some(label => labels.includes(label))) continue;
         const email = GmailApp.getMessageById(id);
         const attachments = email.getAttachments({includeInlineImages: true, includeAttachments: true});
+        // Payment notice? Keep it unread under CheckPlease for review.
         if (isPaymentNotice(email.getSubject(), email.getPlainBody(), attachments.map(file => file.getName()))) {
           Gmail.Users.Messages.modify({addLabelIds: [checkPlease]}, 'me', id);
           continue;
         }
 
+        // Use the Gmail ID. Subjects can repeat, message IDs do not.
         const folder = getOrCreateFolder(root, id);
+        // Save the original email with its headers, body and attachments intact.
         saveFile(folder, Utilities.newBlob(email.getRawContent(), 'message/rfc822', 'email.eml'));
         attachments.forEach((file, index) => {
           if (Date.now() >= deadline) throw new Error('Time limit reached; retry next run.');
