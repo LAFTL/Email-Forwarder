@@ -1,46 +1,44 @@
+const GOOGLE_DRIVE_FOLDER_ID = 'PASTE_FOLDER_ID_HERE'; // Folder ID, not the full URL.
 const HANDLER = 'forwardFromSeptember4'; // Keep the existing trigger working.
 const START = Math.floor(Date.parse('2026-09-04T00:00:00+10:00') / 1000) - 1;
-// Math.floor - whole seconds. The minus one includes the start time.
-// Unread Inbox only. Skip mail already saved or flagged for review.
-const QUERY = `in:inbox is:unread after:${START} -in:sent -in:drafts -in:spam -in:trash -label:forwarded -label:CheckPlease`;
-const DRIVE_FOLDER_NAME = 'Email downloads';
+// Gmail skips payment subjects and emails already marked forwarded.
+const QUERY = `in:inbox is:unread after:${START} -in:sent -label:forwarded -subject:remittance -subject:payment -subject:eft`;
 
 function forwardFromSeptember4() {
-  if (!Number.isFinite(START)) throw new Error('Invalid start date.');
-  // One run at a time, so overlapping triggers cannot save the same email together.
+  if (GOOGLE_DRIVE_FOLDER_ID === 'PASTE_FOLDER_ID_HERE') throw new Error('Set GOOGLE_DRIVE_FOLDER_ID first.');
+  // One run at a time. This prevents overlapping downloads.
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
   try {
+    const folder = DriveApp.getFolderById(GOOGLE_DRIVE_FOLDER_ID);
     const forwarded = labelId('forwarded');
-    const checkPlease = labelId('CheckPlease');
     const messages = Gmail.Users.Messages.list('me', {q: QUERY, maxResults: 50}).messages || [];
-    if (!messages.length) return;
-    const root = getOrCreateFolder(DriveApp.getRootFolder(), DRIVE_FOLDER_NAME);
     const deadline = Date.now() + 240000;
 
     for (const {id} of messages) {
       if (Date.now() >= deadline) break;
       try {
         const labels = Gmail.Users.Messages.get('me', id, {format: 'metadata'}).labelIds || [];
-        if (!labels.includes('INBOX') || !labels.includes('UNREAD') ||
-            [forwarded, checkPlease, 'SENT', 'DRAFT', 'SPAM', 'TRASH'].some(label => labels.includes(label))) continue;
+        if (!labels.includes('INBOX') || !labels.includes('UNREAD') || labels.includes(forwarded)) continue;
         const email = GmailApp.getMessageById(id);
-        const attachments = email.getAttachments({includeInlineImages: true, includeAttachments: true});
-        // Payment notice? Keep it unread under CheckPlease for review.
-        if (isPaymentNotice(email.getSubject(), email.getPlainBody(), attachments.map(file => file.getName()))) {
-          Gmail.Users.Messages.modify({addLabelIds: [checkPlease]}, 'me', id);
-          continue;
+        const pdfName = `${id}_EMAIL_BODY.pdf`;
+        // Print the readable email body to PDF. Reuse it if an earlier run saved it.
+        if (!folder.getFilesByName(pdfName).hasNext()) {
+          const headers = [
+            'Subject: ' + email.getSubject(),
+            'From: ' + email.getFrom(),
+            'To: ' + email.getTo(),
+            'Date (UTC): ' + email.getDate().toISOString(),
+          ].map(escapeHtml).join('<br>');
+          const html = '<p>' + headers + '</p><hr>' + email.getBody();
+          const pdf = Utilities.newBlob(html, MimeType.HTML).getAs(MimeType.PDF).setName(pdfName);
+          folder.createFile(pdf);
         }
-
-        // Use the Gmail ID. Subjects can repeat, message IDs do not.
-        const folder = getOrCreateFolder(root, id);
-        // Save the original email with its headers, body and attachments intact.
-        saveFile(folder, Utilities.newBlob(email.getRawContent(), 'message/rfc822', 'email.eml'));
-        attachments.forEach((file, index) => {
-          if (Date.now() >= deadline) throw new Error('Time limit reached; retry next run.');
-          saveFile(folder, file.copyBlob().setName(`${index + 1}_${file.getName() || 'attachment'}`));
+        // Save the attachments as they arrived. The message ID prevents name clashes.
+        email.getAttachments({includeInlineImages: true, includeAttachments: true}).forEach((file, index) => {
+          saveFile(folder, file.copyBlob().setName(`${id}_${index + 1}_${file.getName() || 'attachment'}`));
         });
-        // Mark complete only after the email and every attachment are saved.
+        // Only mark forwarded and read after every file is saved.
         Gmail.Users.Messages.modify({addLabelIds: [forwarded], removeLabelIds: ['UNREAD']}, 'me', id);
       } catch (error) {
         console.error(`Message ${id}: ${error.message || error}`);
@@ -56,21 +54,11 @@ function labelId(name) {
   return label ? label.id : Gmail.Users.Labels.create({name}, 'me').id;
 }
 
-function getOrCreateFolder(parent, name) {
-  const folders = parent.getFoldersByName(name);
-  return folders.hasNext() ? folders.next() : parent.createFolder(name);
-}
-
 function saveFile(folder, blob) {
-  // Reuse earlier downloads if a run stopped before Gmail labeling succeeded.
   if (!folder.getFilesByName(blob.getName()).hasNext()) folder.createFile(blob);
 }
 
-function isPaymentNotice(subject, body, attachmentNames) {
-  const titles = [subject].concat(attachmentNames).map(text => String(text || '').replace(/[_-]+/g, ' '));
-  const notice = /\bremittance\b|\beft\s+(?:payment\s+)?(?:advice|notice|notification|confirmation)\b|\bpayment\s+(?:advice|confirmation|notification)\b/i;
-  const currentBody = String(body || '').split(/\n(?:On .+wrote:|From:\s)/i)[0];
-  const attachedNotice = /\b(?:attached|enclosed)\s+(?:(?:is|the|your|our|a)\s+){0,3}(?:remittance\s+(?:advice|notice)|eft\s+(?:payment\s+)?(?:advice|notice))\b/i;
-  const eftReceived = /\beft\s+payment\s+(?:has been|was|is)\s+(?:received|made|processed|completed)\b/i;
-  return titles.some(text => notice.test(text)) || attachedNotice.test(currentBody) || eftReceived.test(currentBody);
+function escapeHtml(text) {
+  // Keep sender addresses and subject characters visible in the PDF header.
+  return String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
