@@ -3,6 +3,8 @@
 
 function installForwarder() {
   ScriptApp.getProjectTriggers()
+    .filter(trigger => trigger.getHandlerFunction() === HANDLER &&
+      trigger.getEventType() === ScriptApp.EventType.CLOCK)
     .forEach(trigger => ScriptApp.deleteTrigger(trigger));
 
   ScriptApp.newTrigger(HANDLER)
