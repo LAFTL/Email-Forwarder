@@ -4,8 +4,8 @@ const START = Math.floor(Date.parse('2026-09-04T00:00:00+10:00') / 1000) - 1;
 // Gmail skips payment subjects and emails already marked forwarded.
 const QUERY = `in:inbox is:unread after:${START} -in:sent -label:forwarded -subject:remittance -subject:payment -subject:eft -subjeect:insurance`; // expand query const -subject to measure what to exclude from the list of emails that will be downloaded to google drive
 
-function forwardFromSeptember4() {
-  if (GOOGLE_DRIVE_FOLDER_ID === 'PASTE_FOLDER_ID_HERE') throw new Error('Set GOOGLE_DRIVE_FOLDER_ID first.'); 
+function screamingIntoTheWind() { // Insert a name that makes sense for you
+  if (GOOGLE_DRIVE_FOLDER_ID === 'PASTE_FOLDER_ID_HERE') throw new Error('Set GOOGLE_DRIVE_FOLDER_ID first.'); // May be I should write a script for this part as well... okay i will 
   // One run at a time. This prevents overlapping downloads.
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
