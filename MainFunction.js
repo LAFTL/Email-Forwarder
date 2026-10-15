@@ -1,24 +1,24 @@
 const GOOGLE_DRIVE_FOLDER_ID = 'PASTE_FOLDER_ID_HERE'; // Folder ID, not the full URL.
-const HANDLER = 'forwardFromSeptember4'; // Keep the existing trigger working.
+const HANDLER = 'INSERT_TRIGGER_HANDLER_ID'; // Keep the existing trigger working.
 const START = Math.floor(Date.parse('2026-09-04T00:00:00+10:00') / 1000) - 1;
 // Gmail skips payment subjects and emails already marked forwarded.
-const QUERY = `in:inbox is:unread after:${START} -in:sent -label:forwarded -subject:remittance -subject:payment -subject:eft`;
+const QUERY = `in:inbox is:unread after:${START} -in:sent -label:forwarded -subject:remittance -subject:payment -subject:eft -subjeect:insurance`; // expand query const -subject to measure what to exclude from the list of emails that will be downloaded to google drive
 
 function forwardFromSeptember4() {
-  if (GOOGLE_DRIVE_FOLDER_ID === 'PASTE_FOLDER_ID_HERE') throw new Error('Set GOOGLE_DRIVE_FOLDER_ID first.');
+  if (GOOGLE_DRIVE_FOLDER_ID === 'PASTE_FOLDER_ID_HERE') throw new Error('Set GOOGLE_DRIVE_FOLDER_ID first.'); 
   // One run at a time. This prevents overlapping downloads.
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
   try {
-    const folder = DriveApp.getFolderById(GOOGLE_DRIVE_FOLDER_ID);
+    const folder = DriveApp.getFolderById(GOOGLE_DRIVE_FOLDER_ID); // Drive folder id
     const forwarded = labelId('forwarded');
     const messages = Gmail.Users.Messages.list('me', {q: QUERY, maxResults: 50}).messages || [];
     const deadline = Date.now() + 240000;
 
     for (const {id} of messages) {
-      if (Date.now() >= deadline) break;
-      try {
-        const labels = Gmail.Users.Messages.get('me', id, {format: 'metadata'}).labelIds || [];
+      if (Date.now() >= deadline) break; // date + 4 minutes
+      try { // date + 
+        const labels = Gmail.Users.Messages.get('me', id, {format: 'metadata'}).labelIds || []; // metadata - different to physical label
         if (!labels.includes('INBOX') || !labels.includes('UNREAD') || labels.includes(forwarded)) continue;
         const email = GmailApp.getMessageById(id);
         const pdfName = `${id}_EMAIL_BODY.pdf`;
@@ -30,7 +30,7 @@ function forwardFromSeptember4() {
             'To: ' + email.getTo(),
             'Date (UTC): ' + email.getDate().toISOString(),
           ].map(escapeHtml).join('<br>');
-          const html = '<p>' + headers + '</p><hr>' + email.getBody();
+          const html = '<p>' + headers + '</p><hr>' + email.getBody(); // The issue will be any organisation trying to encapsulate text into a image.
           const pdf = Utilities.newBlob(html, MimeType.HTML).getAs(MimeType.PDF).setName(pdfName);
           folder.createFile(pdf);
         }
@@ -45,7 +45,7 @@ function forwardFromSeptember4() {
       }
     }
   } finally {
-    lock.releaseLock();
+    lock.releaseLock(); // ship this asap replaces the overlap
   }
 }
 
