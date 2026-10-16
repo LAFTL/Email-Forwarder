@@ -5,7 +5,8 @@ const START = Math.floor(Date.parse('2026-09-04T00:00:00+10:00') / 1000) - 1;
 const QUERY = `in:inbox is:unread after:${START} -in:sent -label:forwarded -subject:remittance -subject:payment -subject:eft -subjeect:insurance`; // expand query const -subject to measure what to exclude from the list of emails that will be downloaded to google drive
 
 function screamingIntoTheWind() { // Insert a name that makes sense for you
-  if (GOOGLE_DRIVE_FOLDER_ID === 'PASTE_FOLDER_ID_HERE') throw new Error('Set GOOGLE_DRIVE_FOLDER_ID first.'); // May be I should write a script for this part as well... okay i will 
+  if (GOOGLE_DRIVE_FOLDER_ID === 'PASTE_FOLDER_ID_HERE') throw new Error('Set GOOGLE_DRIVE_FOLDER_ID first.'); // May be I should write a script for this part as well... okay i will
+  // 15/10 late night - If the user can't figure out the folder_id then they will not understand how to turn on and off a pc. let alone something simple like this. But please look at file 'date_handler.js' as snippet
   // One run at a time. This prevents overlapping downloads.
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
